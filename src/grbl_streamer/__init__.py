@@ -883,81 +883,84 @@ class GrblStreamer:
 
     def _onread(self):
         while self._iface_read_do:
-            line = self._queue.get()
+            try:
+                line = self._queue.get()
 
-            if len(line) > 0:
-                if line[0] == "<":
-                    self._update_state(line)
+                if len(line) > 0:
+                    if line[0] == "<":
+                        self._update_state(line)
 
-                elif line == "ok":
-                    self._handle_ok()
+                    elif line == "ok":
+                        self._handle_ok()
 
-                elif re.match(r"^\[G[0123] .*", line):
-                    self._update_gcode_parser_state(line)
-                    self._callback("on_read", line)
-
-                elif line == "[MSG:Caution: Unlocked]":
-                    # nothing to do here
-                    pass
-
-                elif re.match("^\[MSG:.*", line):
-                    if "Pgm End" in line:
-                        self._set_job_finished(True)
-
-                    self._callback("on_read", line)
-
-                elif re.match(r"^\[...:.*", line):
-                    self._update_hash_state(line)
-                    self._callback("on_read", line)
-
-                    if "PRB" in line:
-                        # last line
-                        self._callback("on_hash_stateupdate", self.settings_hash)
-                        self.preprocessor.cs_offsets = self.settings_hash
-                        self._callback("on_probe", self.settings_hash["PRB"])
-
-                elif "ALARM" in line:
-                    # grbl for some reason doesn't respond to ? polling
-                    # when there is an alarm due to soft limits
-                    self.cmode = "Alarm"
-                    self._callback("on_stateupdate", self.cmode, self.cmpos, self.cwpos)
-                    self._callback("on_read", line)
-                    self._callback("on_alarm", line)
-
-                elif "error" in line:
-                    # self.logger.debug("ERROR")
-                    self._error = True
-                    # self.logger.debug("%s: _rx_buffer_backlog at time of error: %s", self.name,  self._rx_buffer_backlog)
-                    if len(self._rx_buffer_backlog) > 0:
-                        problem_command = self._rx_buffer_backlog[0]
-                        problem_line = self._rx_buffer_backlog_line_number[0]
-                    else:
-                        problem_command = "unknown"
-                        problem_line = -1
-                    self._callback("on_error", line, problem_command, problem_line)
-                    self._set_streaming_complete(True)
-                    self._set_streaming_src_end_reached(True)
-
-                elif "Grbl " in line:
-                    self._callback("on_read", line)
-                    self._on_bootup()
-                    self.hash_state_requested = True
-                    self.request_settings()
-                    self.gcode_parser_state_requested = True
-
-                else:
-                    m = re.match(r"\$(.*)=(.*) \((.*)\)", line)
-                    if m:
-                        key = int(m.group(1))
-                        val = m.group(2)
-                        comment = m.group(3)
-                        self.settings[key] = {"val": val, "cmt": comment}
+                    elif re.match(r"^\[G[0123] .*", line):
+                        self._update_gcode_parser_state(line)
                         self._callback("on_read", line)
-                        if key == self._last_setting_number:
-                            self._callback("on_settings_downloaded", self.settings)
-                    else:
+
+                    elif line == "[MSG:Caution: Unlocked]":
+                        # nothing to do here
+                        pass
+
+                    elif re.match("^\[MSG:.*", line):
+                        if "Pgm End" in line:
+                            self._set_job_finished(True)
+
                         self._callback("on_read", line)
-                        # self.logger.info("{}: Could not parse settings: {}".format(self.name, line))
+
+                    elif re.match(r"^\[...:.*", line):
+                        self._update_hash_state(line)
+                        self._callback("on_read", line)
+
+                        if "PRB" in line:
+                            # last line
+                            self._callback("on_hash_stateupdate", self.settings_hash)
+                            self.preprocessor.cs_offsets = self.settings_hash
+                            self._callback("on_probe", self.settings_hash["PRB"])
+
+                    elif "ALARM" in line:
+                        # grbl for some reason doesn't respond to ? polling
+                        # when there is an alarm due to soft limits
+                        self.cmode = "Alarm"
+                        self._callback("on_stateupdate", self.cmode, self.cmpos, self.cwpos)
+                        self._callback("on_read", line)
+                        self._callback("on_alarm", line)
+
+                    elif "error" in line:
+                        # self.logger.debug("ERROR")
+                        self._error = True
+                        # self.logger.debug("%s: _rx_buffer_backlog at time of error: %s", self.name,  self._rx_buffer_backlog)
+                        if len(self._rx_buffer_backlog) > 0:
+                            problem_command = self._rx_buffer_backlog[0]
+                            problem_line = self._rx_buffer_backlog_line_number[0]
+                        else:
+                            problem_command = "unknown"
+                            problem_line = -1
+                        self._callback("on_error", line, problem_command, problem_line)
+                        self._set_streaming_complete(True)
+                        self._set_streaming_src_end_reached(True)
+
+                    elif "Grbl " in line:
+                        self._callback("on_read", line)
+                        self._on_bootup()
+                        self.hash_state_requested = True
+                        self.request_settings()
+                        self.gcode_parser_state_requested = True
+
+                    else:
+                        m = re.match(r"\$(.*)=(.*) \((.*)\)", line)
+                        if m:
+                            key = int(m.group(1))
+                            val = m.group(2)
+                            comment = m.group(3)
+                            self.settings[key] = {"val": val, "cmt": comment}
+                            self._callback("on_read", line)
+                            if key == self._last_setting_number:
+                                self._callback("on_settings_downloaded", self.settings)
+                        else:
+                            self._callback("on_read", line)
+                            # self.logger.info("{}: Could not parse settings: {}".format(self.name, line))
+            except Exception:
+                ...
 
     def _handle_ok(self):
         if not self.streaming_complete:
